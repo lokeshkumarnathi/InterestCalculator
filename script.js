@@ -70,7 +70,7 @@ elements.rate.addEventListener('input', function() {
 
 elements.rateManual.addEventListener('input', function() {
     let rateValue = parseFloat(this.value);
-    if (rateValue < 1) rateValue = 1;
+    if (isNaN(rateValue) || rateValue < 1) rateValue = 1;
     if (rateValue > 50) rateValue = 50;
     elements.rate.value = rateValue;
     elements.rateValue.textContent = `${rateValue.toFixed(1)}%`;
@@ -78,110 +78,134 @@ elements.rateManual.addEventListener('input', function() {
 
 // Calculate interest
 elements.calculate.addEventListener('click', function() {
-    const principal = parseFloat(elements.principal.value);
-    const rate = parseFloat(elements.rate.value);
-    const years = parseFloat(elements.timeYears.value) || 0;
-    const months = parseFloat(elements.timeMonths.value) || 0;
-    const days = parseFloat(elements.timeDays.value) || 0;
-    const frequency = elements.frequency.value;
-    const interestType = elements.interestType.value;
+    console.log('Compute Interest clicked');
+    
+    try {
+        // Get inputs
+        const principal = parseFloat(elements.principal.value);
+        const rate = parseFloat(elements.rate.value);
+        const years = parseFloat(elements.timeYears.value) || 0;
+        const months = parseFloat(elements.timeMonths.value) || 0;
+        const days = parseFloat(elements.timeDays.value) || 0;
+        const frequency = elements.frequency.value;
+        const interestType = elements.interestType.value;
 
-    // Convert time to years
-    const time = years + (months / 12) + (days / 365);
+        console.log('Inputs:', { principal, rate, years, months, days, frequency, interestType });
 
-    // Validation
-    if (!principal || isNaN(principal) || principal < 0 || time <= 0) {
-        elements.error.textContent = 'Please enter valid positive numbers for principal and at least one time period (years, months, or days).';
+        // Validate inputs
+        if (isNaN(principal) || principal <= 0) {
+            elements.error.textContent = 'Please enter a valid positive principal amount.';
+            elements.error.classList.remove('hidden');
+            elements.result.classList.add('hidden');
+            return;
+        }
+        if (isNaN(rate) || rate < 1 || rate > 50) {
+            elements.error.textContent = 'Please enter a valid interest rate between 1 and 50%.';
+            elements.error.classList.remove('hidden');
+            elements.result.classList.add('hidden');
+            return;
+        }
+        const time = years + (months / 12) + (days / 365);
+        if (time <= 0) {
+            elements.error.textContent = 'Please enter at least one valid time period (years, months, or days).';
+            elements.error.classList.remove('hidden');
+            elements.result.classList.add('hidden');
+            return;
+        }
+
+        elements.error.classList.add('hidden');
+
+        // Calculate interest
+        let interest, total;
+        if (frequency === 'monthly') {
+            const monthlyRate = rate / 1200; // Convert annual rate to monthly percentage
+            const periods = time * 12; // Convert time to months
+            if (interestType === 'simple') {
+                interest = principal * monthlyRate * periods;
+                total = principal + interest;
+            } else {
+                total = principal * Math.pow(1 + monthlyRate, periods);
+                interest = total - principal;
+            }
+        } else {
+            if (interestType === 'simple') {
+                interest = (principal * rate * time) / 100;
+                total = principal + interest;
+            } else {
+                total = principal * Math.pow(1 + rate / 100, time);
+                interest = total - principal;
+            }
+        }
+
+        // Store results
+        latestResult.interest = isNaN(interest) ? '0.00' : interest.toFixed(2);
+        latestResult.total = isNaN(total) ? '0.00' : total.toFixed(2);
+
+        // Update DOM
+        elements.interest.textContent = latestResult.interest;
+        elements.total.textContent = latestResult.total;
+        elements.result.classList.remove('hidden');
+
+        // Debug: Log results
+        console.log('Calculation Results:', {
+            interest: latestResult.interest,
+            total: latestResult.total,
+            frequency,
+            interestType
+        });
+
+        // Save to history
+        const entry = { 
+            principal, 
+            rate, 
+            years, 
+            months, 
+            days, 
+            frequency, 
+            interestType, 
+            interest: latestResult.interest, 
+            total: latestResult.total, 
+            date: new Date().toLocaleString() 
+        };
+        history.push(entry);
+        localStorage.setItem('interestHistory', JSON.stringify(history));
+        updateHistory();
+
+        // Update chart
+        const totalPeriods = frequency === 'monthly' ? Math.ceil(time * 12) : Math.ceil(time);
+        const periodArray = Array.from({ length: totalPeriods }, (_, i) => i);
+        let data;
+        if (frequency === 'monthly') {
+            if (interestType === 'simple') {
+                data = periodArray.map(m => principal + (principal * (rate / 1200) * m));
+            } else {
+                data = periodArray.map(m => principal * Math.pow(1 + rate / 1200, m));
+            }
+            chart.options.scales.x.title.text = 'Month';
+        } else {
+            if (interestType === 'simple') {
+                data = periodArray.map(y => principal + (principal * rate * y) / 100);
+            } else {
+                data = periodArray.map(y => principal * Math.pow(1 + rate / 100, y));
+            }
+            chart.options.scales.x.title.text = 'Year';
+        }
+        chart.data.labels = periodArray;
+        chart.data.datasets[0].data = data;
+        chart.update({ duration: 300 });
+
+        console.log('Chart updated with', totalPeriods, 'periods');
+    } catch (error) {
+        console.error('Calculation Error:', error);
+        elements.error.textContent = 'An error occurred during calculation. Check console for details.';
         elements.error.classList.remove('hidden');
         elements.result.classList.add('hidden');
-        return;
     }
-
-    elements.error.classList.add('hidden');
-    let interest, total;
-
-    if (frequency === 'monthly') {
-        const monthlyRate = rate / 1200; // Convert annual rate to monthly percentage
-        const periods = time * 12; // Convert time to months
-        if (interestType === 'simple') {
-            interest = principal * monthlyRate * periods;
-            total = principal + interest;
-        } else {
-            total = principal * Math.pow(1 + monthlyRate, periods);
-            interest = total - principal;
-        }
-    } else {
-        if (interestType === 'simple') {
-            interest = (principal * rate * time) / 100;
-            total = principal + interest;
-        } else {
-            total = principal * Math.pow(1 + rate / 100, time);
-            interest = total - principal;
-        }
-    }
-
-    // Store results
-    latestResult.interest = interest.toFixed(2);
-    latestResult.total = total.toFixed(2);
-
-    // Update DOM
-    elements.interest.textContent = latestResult.interest;
-    elements.total.textContent = latestResult.total;
-    elements.result.classList.remove('hidden');
-
-    // Debug: Log calculation results
-    console.log('Calculation Results:');
-    console.log('Principal:', principal);
-    console.log('Rate:', rate);
-    console.log('Time (years):', time);
-    console.log('Frequency:', frequency);
-    console.log('Interest Type:', interestType);
-    console.log('Interest:', latestResult.interest);
-    console.log('Total:', latestResult.total);
-
-    // Save to history
-    const entry = { 
-        principal, 
-        rate, 
-        years, 
-        months, 
-        days, 
-        frequency, 
-        interestType, 
-        interest: latestResult.interest, 
-        total: latestResult.total, 
-        date: new Date().toLocaleString() 
-    };
-    history.push(entry);
-    localStorage.setItem('interestHistory', JSON.stringify(history));
-    updateHistory();
-
-    // Update chart
-    const totalPeriods = frequency === 'monthly' ? Math.ceil(time * 12) : Math.ceil(time);
-    const periodArray = Array.from({ length: totalPeriods }, (_, i) => i);
-    let data;
-    if (frequency === 'monthly') {
-        if (interestType === 'simple') {
-            data = periodArray.map(m => principal + (principal * (rate / 1200) * m));
-        } else {
-            data = periodArray.map(m => principal * Math.pow(1 + rate / 1200, m));
-        }
-        chart.options.scales.x.title.text = 'Month';
-    } else {
-        if (interestType === 'simple') {
-            data = periodArray.map(y => principal + (principal * rate * y) / 100);
-        } else {
-            data = periodArray.map(y => principal * Math.pow(1 + rate / 100, y));
-        }
-        chart.options.scales.x.title.text = 'Year';
-    }
-    chart.data.labels = periodArray;
-    chart.data.datasets[0].data = data;
-    chart.update({ duration: 300 });
 });
 
 // Clear history
 elements.clearHistory.addEventListener('click', function() {
+    console.log('Clear History clicked');
     history = [];
     localStorage.setItem('interestHistory', JSON.stringify(history));
     updateHistory();
@@ -196,4 +220,5 @@ function updateHistory() {
         li.textContent = `${entry.date}: ₹${entry.principal}, ${entry.rate}%, ${entry.years}y ${entry.months}m ${entry.days}d, ${entry.frequency}, ${entry.interestType}, Interest: ₹${entry.interest}, Total: ₹${entry.total}`;
         elements.history.appendChild(li);
     });
+    console.log('History updated:', history.length, 'entries');
 }
