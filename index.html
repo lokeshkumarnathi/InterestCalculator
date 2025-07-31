@@ -20,8 +20,9 @@
                 <input type="number" id="principal" class="mt-1 block w-full p-3 border-none rounded-md bg-gray-800 text-yellow-200 placeholder-gray-400 focus:ring-2 focus:ring-yellow-400" placeholder="Enter principal" min="0">
             </div>
             <div>
-                <label for="rate" class="block text-sm font-medium text-yellow-200">Interest Rate (%)</label>
+                <label for="rate-manual" class="block text-sm font-medium text-yellow-200">Interest Rate (%)</label>
                 <div class="flex items-center space-x-4">
+                    <input type="number" id="rate-manual" min="1" max="50" step="0.1" value="5" class="w-24 p-3 border-none rounded-md bg-gray-800 text-yellow-200 placeholder-gray-400 focus:ring-2 focus:ring-yellow-400">
                     <input type="range" id="rate" min="1" max="50" step="0.1" value="5" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
                     <span id="rate-value" class="text-sm text-yellow-200 w-12">5%</span>
                 </div>
@@ -43,6 +44,13 @@
                 <select id="interest-type" class="mt-1 block w-full p-3 border-none rounded-md bg-gray-800 text-yellow-200 focus:ring-2 focus:ring-yellow-400">
                     <option value="simple">Simple Interest</option>
                     <option value="compound">Compound Interest</option>
+                </select>
+            </div>
+            <div>
+                <label for="frequency" class="block text-sm font-medium text-yellow-200">Calculation Frequency</label>
+                <select id="frequency" class="mt-1 block w-full p-3 border-none rounded-md bg-gray-800 text-yellow-200 focus:ring-2 focus:ring-yellow-400">
+                    <option value="annually">Annually</option>
+                    <option value="monthly">Monthly</option>
                 </select>
             </div>
             <button id="calculate" class="w-full bg-yellow-400 text-black p-3 rounded-md hover:bg-yellow-500 hover:shadow-glow transition duration-300">Compute Interest</button>
