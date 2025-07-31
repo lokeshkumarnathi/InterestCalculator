@@ -2,11 +2,13 @@
 const elements = {
     principal: document.getElementById('principal'),
     rate: document.getElementById('rate'),
+    rateManual: document.getElementById('rate-manual'),
     rateValue: document.getElementById('rate-value'),
     timeYears: document.getElementById('time-years'),
     timeMonths: document.getElementById('time-months'),
     timeDays: document.getElementById('time-days'),
     interestType: document.getElementById('interest-type'),
+    frequency: document.getElementById('frequency'),
     calculate: document.getElementById('calculate'),
     result: document.getElementById('result'),
     interest: document.getElementById('interest'),
@@ -61,10 +63,19 @@ let chart = new Chart(ctx, {
 let history = JSON.parse(localStorage.getItem('interestHistory')) || [];
 updateHistory();
 
-// Update rate display
+// Sync rate inputs
 elements.rate.addEventListener('input', function() {
     const rateValue = parseFloat(this.value).toFixed(1);
+    elements.rateManual.value = rateValue;
     elements.rateValue.textContent = `${rateValue}%`;
+});
+
+elements.rateManual.addEventListener('input', function() {
+    let rateValue = parseFloat(this.value);
+    if (rateValue < 1) rateValue = 1;
+    if (rateValue > 50) rateValue = 50;
+    elements.rate.value = rateValue;
+    elements.rateValue.textContent = `${rateValue.toFixed(1)}%`;
 });
 
 // Calculate interest
@@ -75,6 +86,7 @@ elements.calculate.addEventListener('click', function() {
     const months = parseFloat(elements.timeMonths.value) || 0;
     const days = parseFloat(elements.timeDays.value) || 0;
     const interestType = elements.interestType.value;
+    const frequency = elements.frequency.value;
 
     // Convert time to years
     const time = years + (months / 12) + (days / 365);
@@ -94,8 +106,15 @@ elements.calculate.addEventListener('click', function() {
         interest = (principal * rate * time) / 100;
         total = principal + interest;
     } else {
-        total = principal * Math.pow(1 + rate / 100, time);
-        interest = total - principal;
+        if (frequency === 'monthly') {
+            const monthlyRate = rate / 1200; // Convert annual rate to monthly percentage
+            const periods = time * 12; // Convert time to months
+            total = principal * Math.pow(1 + monthlyRate, periods);
+            interest = total - principal;
+        } else {
+            total = principal * Math.pow(1 + rate / 100, time);
+            interest = total - principal;
+        }
     }
 
     // Store results
@@ -114,6 +133,7 @@ elements.calculate.addEventListener('click', function() {
         months, 
         days, 
         interestType, 
+        frequency, 
         interest: latestResult.interest, 
         total: latestResult.total, 
         date: new Date().toLocaleString() 
@@ -125,9 +145,14 @@ elements.calculate.addEventListener('click', function() {
     // Update chart efficiently
     const totalYears = Math.ceil(time); // Round up to include partial years
     const yearsArray = Array.from({ length: totalYears }, (_, i) => i);
-    const data = interestType === 'simple'
-        ? yearsArray.map(y => principal + (principal * rate * y) / 100)
-        : yearsArray.map(y => principal * Math.pow(1 + rate / 100, y));
+    let data;
+    if (interestType === 'simple') {
+        data = yearsArray.map(y => principal + (principal * rate * y) / 100);
+    } else if (frequency === 'monthly') {
+        data = yearsArray.map(y => principal * Math.pow(1 + rate / 1200, y * 12));
+    } else {
+        data = yearsArray.map(y => principal * Math.pow(1 + rate / 100, y));
+    }
     chart.data.labels = yearsArray;
     chart.data.datasets[0].data = data;
     chart.update({ duration: 300 }); // Smooth update with minimal re-render
@@ -135,28 +160,57 @@ elements.calculate.addEventListener('click', function() {
 
 // Save as PDF
 elements.savePdf.addEventListener('click', function() {
-    // Check if results are available
-    if (!latestResult.interest || !latestResult.total || elements.result.classList.contains('hidden')) {
+    // Check if results are available and valid
+    if (elements.result.classList.contains('hidden') || !elements.interest.textContent || !elements.total.textContent || !latestResult.interest || !latestResult.total) {
         elements.error.textContent = 'Please calculate interest before saving as PDF.';
         elements.error.classList.remove('hidden');
         return;
     }
 
     elements.error.classList.add('hidden');
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    doc.setFontSize(16);
-    doc.setTextColor(255, 215, 0); // Yellow text
-    doc.text('Interest Calculation Result', 20, 20);
-    doc.setFontSize(12);
-    doc.setTextColor(255, 255, 255); // White text for details
-    doc.text(`Principal: ₹${elements.principal.value}`, 20, 30);
-    doc.text(`Rate: ${elements.rate.value}%`, 20, 40);
-    doc.text(`Time: ${elements.timeYears.value || 0}y ${elements.timeMonths.value || 0}m ${elements.timeDays.value || 0}d`, 20, 50);
-    doc.text(`Interest Type: ${elements.interestType.value}`, 20, 60);
-    doc.text(`Interest: ₹${latestResult.interest}`, 20, 70);
-    doc.text(`Total Amount: ₹${latestResult.total}`, 20, 80);
-    doc.save('interest_calculation.pdf');
+
+    // Debug: Log values to verify
+    console.log('Generating PDF with values:');
+    console.log('Principal:', elements.principal.value);
+    console.log('Rate:', elements.rate.value);
+    console.log('Time:', `${elements.timeYears.value || 0}y ${elements.timeMonths.value || 0}m ${elements.timeDays.value || 0}d`);
+    console.log('Interest Type:', elements.interestType.value);
+    console.log('Frequency:', elements.frequency.value);
+    console.log('Interest:', elements.interest.textContent);
+    console.log('Total:', elements.total.textContent);
+
+    try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+
+        // Prepare formatted text
+        const text = [
+            'Interest Calculation Result',
+            '',
+            `Principal: ₹${parseFloat(elements.principal.value || 0).toFixed(2)}`,
+            `Rate: ${parseFloat(elements.rate.value || 0).toFixed(1)}%`,
+            `Time: ${elements.timeYears.value || 0}y ${elements.timeMonths.value || 0}m ${elements.timeDays.value || 0}d`,
+            `Interest Type: ${elements.interestType.value}`,
+            `Frequency: ${elements.frequency.value}`,
+            `Interest: ₹${parseFloat(elements.interest.textContent || 0).toFixed(2)}`,
+            `Total Amount: ₹${parseFloat(elements.total.textContent || 0).toFixed(2)}`
+        ].join('\n');
+
+        // Set font and colors
+        doc.setFontSize(12);
+        doc.setTextColor(255, 255, 255); // White text
+        doc.setFont('helvetica', 'normal');
+
+        // Add text to PDF
+        doc.text(text, 20, 20);
+
+        // Save PDF
+        doc.save('interest_calculation.pdf');
+    } catch (error) {
+        console.error('Error generating PDF:', error);
+        elements.error.textContent = 'Error generating PDF. Please try again.';
+        elements.error.classList.remove('hidden');
+    }
 });
 
 // Clear history
@@ -172,7 +226,7 @@ function updateHistory() {
     history.forEach(entry => {
         const li = document.createElement('li');
         li.className = 'text-sm text-yellow-200';
-        li.textContent = `${entry.date}: ₹${entry.principal}, ${entry.rate}%, ${entry.years}y ${entry.months}m ${entry.days}d, ${entry.interestType}, Interest: ₹${entry.interest}, Total: ₹${entry.total}`;
+        li.textContent = `${entry.date}: ₹${entry.principal}, ${entry.rate}%, ${entry.years}y ${entry.months}m ${entry.days}d, ${entry.interestType}, ${entry.frequency}, Interest: ₹${entry.interest}, Total: ₹${entry.total}`;
         elements.history.appendChild(li);
     });
 }
